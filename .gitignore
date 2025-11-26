@@ -1,0 +1,47 @@
+# Python cache and virtualenv
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+.env/
+venv/
+ENV/
+env/
+.DS_Store
+
+# IDE/project files
+.vscode/
+.idea/
+*.swp
+
+# Output folders
+outputs/
+reports/
+logs/
+
+# CSV and Excel files (any sensitive data)
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.ods
+*.json
+*.parquet
+
+# Backup or temporary files
+*.bak
+*.tmp
+*.log
+*.zip
+*.tar.gz
+*.7z
+*.rar
+
+# OS-specific junk
+Thumbs.db
+desktop.ini
+
+# Jupyter or temp analysis
+*.ipynb_checkpoints
+.ipynb_checkpoints/
