@@ -82,6 +82,8 @@ python match.py --kickstart "KICKSTART LEADS.csv" --wld-calls "WLD_Phone_Calls.c
 python match.py   --kickstart "KICKSTART LEADS.csv"   --wld-calls "WLD_Phone_Calls.csv"   --wld-forms "WLD_Form_Submissions.csv"   --value-column FirstVisitPay   --outdir output_results
 ```
 
+**Tip about WLD call exports:** the phone column is usually named `Number` (not `Phone Number`). The script now auto-falls back to `Number`, but you can also pass it explicitly with `--wld-calls-phone-col Number`.
+
 ---
 
 ## Output Files
