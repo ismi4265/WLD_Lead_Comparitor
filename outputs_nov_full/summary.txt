@@ -1,0 +1,7 @@
+number_of_matches (Kick leads): 17
+number_of_match_pairs (Kick-WLD): 17
+total_kick_leads: 361
+total_wld_leads: 40
+conversion_rate_from_kick: 4.71%
+conversion_rate_from_wld: 37.50%
+patient_value_sum: 1968.23

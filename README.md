@@ -82,7 +82,11 @@ python match.py --kickstart "KICKSTART LEADS.csv" --wld-calls "WLD_Phone_Calls.c
 python match.py   --kickstart "KICKSTART LEADS.csv"   --wld-calls "WLD_Phone_Calls.csv"   --wld-forms "WLD_Form_Submissions.csv"   --value-column FirstVisitPay   --outdir output_results
 ```
 
-**Tip about WLD call exports:** the phone column is usually named `Number` (not `Phone Number`). The script now auto-falls back to `Number`, but you can also pass it explicitly with `--wld-calls-phone-col Number`.
+**Tips / common flags**
+- WLD call exports usually name the phone column `Number` (not `Phone Number`). The script auto-uses `Number`, or pass `--wld-calls-phone-col Number`.
+- Emails are matched automatically if present; override column names with `--kickstart-email-col`, `--wld-calls-email-col`, `--wld-forms-email-col`.
+- Filter Kickstart by clinic(s): `--kickstart-clinic-filter Chaska "WLD Implants"`.
+- Enable/loosen fuzzy names: `--fuzzy-name-threshold 0.85` (0 disables).
 
 ---
 
@@ -93,7 +97,7 @@ Inside the output folder you will find:
 - `matched_rows.csv` — Final matched Kickstart–WLD pairs
 - `unmatched_kickstart.csv`
 - `unmatched_wld.csv`
-- `near_matches.csv`
+- `near_matches.csv` — Weaker matches (nickname/initial/phonetic/phone-fragment/fuzzy)
 - `summary.json`
 - `summary.txt`
 
@@ -101,10 +105,16 @@ Inside the output folder you will find:
 
 ## How Matching Works
 
-1. **Phone number** (most accurate)
-2. **Email address**
-3. **Normalized name**
-4. **Near matches** (same last name + first initial + area code OR same last name + email domain)
+Order (strongest → weakest):
+1. Phone (last 10 digits)
+2. Email
+3. Exact normalized name (handles “Last, First” and strips punctuation)
+4. Nickname-expanded name (e.g., Drew → Andrew)
+5. First initial + last name
+6. Phonetic last name (Soundex) + first initial
+7. Last name + last 4–5 digits of phone
+8. Fuzzy name (optional, via `--fuzzy-name-threshold`)
+Date proximity is used only to break ties between weak matches.
 
 ---
 

@@ -63,6 +63,15 @@ def coalesce_columns(df: pd.DataFrame, candidates) -> (pd.Series, list):
     return series, cols
 
 
+def normalize_email_series(s: pd.Series) -> pd.Series:
+    """
+    Lowercase/trim emails and convert blanks to None.
+    """
+    if s is None:
+        return pd.Series(dtype=object)
+    return s.map(lambda x: (lambda v: v if v else None)(str(x).strip().lower()) if pd.notna(x) else None)
+
+
 def last_first_to_first_last(value: str) -> str:
     """
     Convert 'Last, First[ Middle...]' -> 'First[ Middle...] Last'.
@@ -423,12 +432,15 @@ def main():
     # Column names (overrideable if exports change)
     ap.add_argument("--kickstart-name-col", default="PatNum", help="Kickstart name column (default: PatNum)")
     ap.add_argument("--kickstart-phone-col", default="WirelessPhone", help="Kickstart phone column (default: WirelessPhone)")
+    ap.add_argument("--kickstart-email-col", default=None, help="Kickstart email column (optional)")
 
     ap.add_argument("--wld-calls-name-col", default="Patient", help="WLD calls name column (default: Patient)")
     ap.add_argument("--wld-calls-phone-col", default="Phone Number", help="WLD calls phone column (default: 'Phone Number')")
+    ap.add_argument("--wld-calls-email-col", default="Email", help="WLD calls email column (default: Email)")
 
     ap.add_argument("--wld-forms-name-col", default="Patient", help="WLD forms name column (default: Patient)")
     ap.add_argument("--wld-forms-phone-col", default="Phone", help="WLD forms phone column (default: Phone)")
+    ap.add_argument("--wld-forms-email-col", default="Email", help="WLD forms email column (default: Email)")
 
     ap.add_argument("--value-column", default="FirstVisitPay", help="Kickstart value column to sum (default: FirstVisitPay)")
     ap.add_argument("--outdir", default="outputs", help="Output directory (default: outputs)")
@@ -479,6 +491,7 @@ def main():
     # Build normalized keys
     # -------------------------
     ks["_phone_key"] = normalize_phone_series(ks.get(args.kickstart_phone_col))
+    ks["_email_key"] = normalize_email_series(ks.get(args.kickstart_email_col)) if args.kickstart_email_col and args.kickstart_email_col in ks.columns else pd.Series([None] * len(ks))
     ks["_name_key"], ks["_name_nick_key"] = normalize_name_variants(ks.get(args.kickstart_name_col))
     ks["_initial_last_key"] = build_initial_last_key(ks["_name_nick_key"])
     ks["_soundex_key"] = build_soundex_key(ks["_name_nick_key"])
@@ -499,6 +512,7 @@ def main():
         print(f"Info: combining WLD Calls phone columns {calls_cols_used}")
 
     calls["_phone_key"] = normalize_phone_series(calls_phone_raw)
+    calls["_email_key"] = normalize_email_series(calls.get(args.wld_calls_email_col)) if args.wld_calls_email_col in calls.columns else pd.Series([None] * len(calls))
     calls["_name_key"], calls["_name_nick_key"] = normalize_name_variants(calls.get(args.wld_calls_name_col))
     calls["_initial_last_key"] = build_initial_last_key(calls["_name_nick_key"])
     calls["_soundex_key"] = build_soundex_key(calls["_name_nick_key"])
@@ -519,6 +533,7 @@ def main():
         print(f"Info: combining WLD Forms phone columns {forms_cols_used}")
 
     forms["_phone_key"] = normalize_phone_series(forms_phone_raw)
+    forms["_email_key"] = normalize_email_series(forms.get(args.wld_forms_email_col)) if args.wld_forms_email_col in forms.columns else pd.Series([None] * len(forms))
     forms["_name_key"], forms["_name_nick_key"] = normalize_name_variants(forms.get(args.wld_forms_name_col))
     forms["_initial_last_key"] = build_initial_last_key(forms["_name_nick_key"])
     forms["_soundex_key"] = build_soundex_key(forms["_name_nick_key"])
@@ -538,13 +553,14 @@ def main():
     # Matching (pre-dedup) – phone then name
     # -------------------------
     m_phone = safe_merge(ks, wld, "_phone_key", "phone")
+    m_email = safe_merge(ks, wld, "_email_key", "email")
     m_name = safe_merge(ks, wld, "_name_key", "name")
     m_name_nick = safe_merge(ks, wld, "_name_nick_key", "name_nick")
     m_initial_last = safe_merge(ks, wld, "_initial_last_key", "initial_last")
     m_soundex = safe_merge(ks, wld, "_soundex_key", "soundex_initial_last")
     m_phonefrag = safe_merge(ks, wld, "_last_phonefrag_key", "last_phonefrag")
 
-    matches_list = [m for m in (m_phone, m_name, m_name_nick, m_initial_last, m_soundex, m_phonefrag) if not m.empty]
+    matches_list = [m for m in (m_phone, m_email, m_name, m_name_nick, m_initial_last, m_soundex, m_phonefrag) if not m.empty]
     if matches_list:
         all_matches = pd.concat(matches_list, ignore_index=True)
     else:
@@ -554,15 +570,17 @@ def main():
         # priority and score (for date-aware tie-breaks)
         prio = {
             "phone": 0,
-            "name": 1,
-            "name_nick": 2,
-            "initial_last": 3,
-            "soundex_initial_last": 4,
-            "last_phonefrag": 5,
-            "name_fuzzy": 6,
+            "email": 1,
+            "name": 2,
+            "name_nick": 3,
+            "initial_last": 4,
+            "soundex_initial_last": 5,
+            "last_phonefrag": 6,
+            "name_fuzzy": 7,
         }
         base_score = {
             "phone": 1.0,
+            "email": 0.97,
             "name": 0.95,
             "name_nick": 0.92,
             "initial_last": 0.9,
@@ -645,6 +663,11 @@ def main():
 
     # Save matched rows (with ks_id, wld_id)
     matched.to_csv(outdir / "matched_rows.csv", index=False)
+
+    # Near matches: weaker than phone/email/name exact
+    weak_types = {"name_nick", "initial_last", "soundex_initial_last", "last_phonefrag", "name_fuzzy"}
+    near_matches = matched[matched["_match_type"].isin(weak_types)] if not matched.empty else pd.DataFrame()
+    near_matches.to_csv(outdir / "near_matches.csv", index=False)
 
     # -------------------------
     # Patient value sum from Kickstart
